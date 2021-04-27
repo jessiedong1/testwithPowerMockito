@@ -1,0 +1,4 @@
+rootProject.name = 'GradleBuild'
+include 'Module1'
+include 'Module2'
+

@@ -1,0 +1,83 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+}
+
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'javax.mail:mail:1.4.7'
+    implementation project(':Module1')
+    testImplementation "org.mockito:mockito-core:2.7.5"
+    testImplementation('junit:junit:4.13')
+    testImplementation 'org.powermock:powermock-api-mockito2:2.0.2'
+    testImplementation 'org.powermock:powermock-module-junit4-rule-agent:2.0.2'
+    testImplementation 'org.powermock:powermock-module-junit4-rule:2.0.2'
+    testImplementation 'org.powermock:powermock-module-junit4:2.0.2'
+
+}
+
+task instrument(dependsOn: [classes, project.configurations.jacocoAnt]) {
+    inputs.files classes.outputs.files
+    File outputDir = new File(project.buildDir, 'instrumentedClasses')
+    outputs.dir outputDir
+    doFirst {
+        project.delete(outputDir)
+        ant.taskdef(
+                resource: 'org/jacoco/ant/antlib.xml',
+                classpath: project.configurations.jacocoAnt.asPath,
+                uri: 'jacoco'
+        )
+        def instrumented = false
+        if (file(sourceSets.main.java.outputDir).exists()) {
+            def instrumentedClassedDir = "${outputDir}/${sourceSets.main.java}"
+            print sourceSets.main.java.outputDir
+            ant.'jacoco:instrument'(destdir: instrumentedClassedDir) {
+//                fileset(dir: sourceSets.main.java.outputDir, includes: '**/*.class')
+//                fileset(dir: sourceSets.main.java.outputDir, includes: '**/MockObject.class')
+                fileset(dir: sourceSets.main.java.outputDir, includes: '**/SendEmailClass.class')
+                fileset(dir: sourceSets.main.java.outputDir, includes: '**/RealObject.class')
+//                fileset(dir: sourceSets.main.java.outputDir, includes: '**/UsingMockObject.class')
+            }
+            //Replace the classes dir in the test classpath with the instrumented one
+            sourceSets.test.runtimeClasspath -= files(sourceSets.main.java.outputDir)
+            sourceSets.test.runtimeClasspath += files(instrumentedClassedDir)
+            instrumented = true
+        }
+        if (instrumented) {
+            test.jvmArgs += '-noverify'
+        }
+    }
+}
+test {
+    dependsOn instrument
+    useJUnit()
+    finalizedBy jacocoTestReport // report is always generated after tests run
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+    reports {
+        xml.enabled false
+        csv.enabled false
+        html.destination file("${buildDir}/jacocoHtml")
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.5
+            }
+        }
+    }
+}
+jacoco {
+    toolVersion = "0.8.6"
+}
